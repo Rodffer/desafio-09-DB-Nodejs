@@ -9,6 +9,7 @@ import {
 
 import OrdersProducts from '@modules/orders/infra/typeorm/entities/OrdersProducts';
 
+@Entity('products')
 class Product {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -16,16 +17,13 @@ class Product {
   @Column()
   name: string;
 
-  @Column('decimal')
+  @Column({ type: 'decimal', precision: 5, scale: 2 })
   price: number;
 
-  @Column('numeric')
+  @Column('int')
   quantity: number;
 
-  @OneToMany(() => OrdersProducts, ({ product }) => product, {
-    cascade: ['insert'],
-    eager: true,
-  })
+  @OneToMany(() => OrdersProducts, order_products => order_products.product)
   order_products: OrdersProducts[];
 
   @CreateDateColumn()

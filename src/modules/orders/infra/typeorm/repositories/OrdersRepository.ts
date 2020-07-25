@@ -2,6 +2,7 @@ import { getRepository, Repository } from 'typeorm';
 
 import IOrdersRepository from '@modules/orders/repositories/IOrdersRepository';
 import ICreateOrderDTO from '@modules/orders/dtos/ICreateOrderDTO';
+import OrdersProducts from '@modules/orders/infra/typeorm/entities/OrdersProducts';
 import Order from '../entities/Order';
 
 class OrdersRepository implements IOrdersRepository {
@@ -12,9 +13,19 @@ class OrdersRepository implements IOrdersRepository {
   }
 
   public async create({ customer, products }: ICreateOrderDTO): Promise<Order> {
+    const productsInOrder = products.map(product => {
+      const orderProduct = new OrdersProducts();
+
+      orderProduct.product_id = product.product_id;
+      orderProduct.price = product.price;
+      orderProduct.quantity = product.quantity;
+
+      return orderProduct;
+    });
+
     const order = this.ormRepository.create({
       customer,
-      order_products: products,
+      order_products: productsInOrder,
     });
 
     await this.ormRepository.save(order);
@@ -26,7 +37,6 @@ class OrdersRepository implements IOrdersRepository {
     const order = await this.ormRepository.findOne(id);
 
     return order;
-
   }
 }
 

@@ -6,6 +6,7 @@ import IProductsRepository from '@modules/products/repositories/IProductsReposit
 import ICustomersRepository from '@modules/customers/repositories/ICustomersRepository';
 import Order from '../infra/typeorm/entities/Order';
 import IOrdersRepository from '../repositories/IOrdersRepository';
+import ordersRouter from '../infra/http/routes/orders.routes';
 
 interface IProduct {
   id: string;
@@ -31,53 +32,66 @@ class CreateOrderService {
   ) {}
 
   public async execute({ customer_id, products }: IRequest): Promise<Order> {
-    const findCustomer = await this.customersRepository.findById(customer_id);
+    const customer = await this.customersRepository.findById(customer_id);
 
-    if (!findCustomer) {
-      throw new AppError('Customer not found');
+    if (!customer) {
+      throw new AppError('Customer not exists', 400);
     }
 
-    const findAllProductsById = await this.productsRepository.findAllById(
-      products,
-    );
+    const productsIds = products.map(product => ({ id: product.id }));
 
-    if (findAllProductsById.length < 1) {
-      throw new AppError('Product does not exists', 400);
+    const productList = await this.productsRepository.findAllById(productsIds);
+
+    products.filter(product => {
+      const stockedProduct = productList.find(
+        searchProduct => searchProduct.id === product.id,
+      );
+
+      if (
+        stockedProduct &&
+        stockedProduct.quantity - product.quantity <= 0 &&
+        stockedProduct.quantity < product.quantity
+      ) {
+        throw new AppError('Product out of stock');
+      }
+
+      return stockedProduct;
+    });
+
+    if (productList.length < products.length) {
+      throw new AppError('Invalid quantities');
     }
-    const filteredProducts = findAllProductsById.map(product => {
-      const { id } = product;
 
-      const findProduct = products.find(p => p.id === id);
-
-      if (!findProduct) {
-        throw new AppError('Product does not exists', 400);
-      }
-
-      if (findProduct.quantity > product.quantity) {
-        throw new AppError(
-          'The specified quantity is greater than the available quantity',
-        );
-      }
+    const orderedProducts = productList.map(product => {
+      const productIndex = products.findIndex(p => p.id === product.id);
 
       return {
-        ...product,
-        quantity: findProduct.quantity,
+        product_id: product.id,
+        price: product.price,
+        quantity: products[productIndex].quantity,
       };
     });
 
     const order = await this.ordersRepository.create({
-      customer: findCustomer,
-      products: filteredProducts.map(product => ({
-        product_id: product.id,
-        quantity: product.quantity,
-        price: product.price,
-      })),
+      customer,
+      products: orderedProducts,
     });
 
-    await this.productsRepository.updateQuantity(products);
+    const stockUpdated = productList.map(product => {
+      const productIndex = products.findIndex(p => p.id === product.id);
+
+      return {
+        id: product.id,
+        quantity: products[productIndex].quantity,
+      };
+    });
+
+    console.log('Stock Atualizado');
+    console.log(stockUpdated);
+
+    await this.productsRepository.updateQuantity(stockUpdated);
 
     return order;
-
   }
 }
 

@@ -1,6 +1,4 @@
-import { getRepository, Repository } from 'typeorm';
-
-import AppError from '@shared/errors/AppError';
+import { getRepository, Repository, In } from 'typeorm';
 
 import IProductsRepository from '@modules/products/repositories/IProductsRepository';
 import ICreateProductDTO from '@modules/products/dtos/ICreateProductDTO';
@@ -23,53 +21,52 @@ class ProductsRepository implements IProductsRepository {
     price,
     quantity,
   }: ICreateProductDTO): Promise<Product> {
-    const product = await this.ormRepository.create({ name, price, quantity });
+    const product = this.ormRepository.create({
+      name,
+      price,
+      quantity,
+    });
 
     await this.ormRepository.save(product);
 
     return product;
   }
 
-  public async findById(id: string): Promise<Product | undefined> {
-    const findProduct = await this.ormRepository.findOne(id);
-
-    return findProduct;
-  }
-
   public async findByName(name: string): Promise<Product | undefined> {
-    const findProduct = await this.ormRepository.findOne({
+    const product = await this.ormRepository.findOne({
       where: {
         name,
       },
     });
 
-    return findProduct;
+    return product;
   }
 
   public async findAllById(products: IFindProducts[]): Promise<Product[]> {
-    const findProducts = await this.ormRepository.findByIds(products);
+    const ids = products.map(p => p.id);
 
-    return findProducts;
+    const productList = await this.ormRepository.find({ id: In(ids) });
+
+    return productList;
   }
 
   public async updateQuantity(
     products: IUpdateProductsQuantityDTO[],
   ): Promise<Product[]> {
-    const updatedProducts = await Promise.all(
-      products.map(async product => {
-        const findProduct = await this.ormRepository.findOne(product.id);
+    const productsItems = await this.findAllById(products);
 
-        if (!findProduct) {
-          throw new AppError('Product does not exists');
-        }
+    console.log('Product Itens');
+    console.log(productsItems);
 
-        findProduct.quantity -= Number(product.quantity);
+    const updatedProducts = productsItems.map(product => {
+      const index = products.findIndex(p => p.id === product.id);
 
-        const updatedProduct = await this.ormRepository.save(findProduct);
+      product.quantity -= products[index].quantity;
 
-        return updatedProduct;
-      }),
-    );
+      return product;
+    });
+
+    await this.ormRepository.save(updatedProducts);
 
     return updatedProducts;
   }
